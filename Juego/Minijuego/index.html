@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Phaser - Bomb spritesheet + explosion</title>
+    <script src="//cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
+    <style type="text/css">
+        body { margin: 0; }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript">
+
+    var config = {
+        type: Phaser.AUTO,
+        width: 800,
+        height: 600,
+        physics: {
+            default: 'arcade',
+            arcade: {
+                gravity: { y: 300 },
+                debug: false
+            }
+        },
+        scene: {
+            preload: preload,
+            create: create,
+            update: update
+        }
+    };
+
+    var player;
+    var platforms;
+    var bombs;
+    var cursors;
+
+    var game = new Phaser.Game(config);
+
+    function preload() {     // assets: coloca estos archivos en la carpeta "assets/" relative al html
+        this.load.image('sky', 'assets/sky.png');
+        this.load.image('ground', 'assets/platform.png');
+
+        this.load.spritesheet('bomb', 'assets/bomb_spritesheet.png', { frameWidth: 32, frameHeight: 32 });
+
+        this.load.spritesheet('dude', 'assets/dude.png', { frameWidth: 32, frameHeight: 48 });
+    }
+
+    function create() {
+        this.add.image(400, 300, 'sky');
+
+        platforms = this.physics.add.staticGroup();
+        platforms.create(400, 568, 'ground').setScale(2).refreshBody();
+
+        bombs = this.physics.add.group({
+            defaultKey: 'bomb',
+            bounceY: 0.2,
+            collideWorldBounds: true
+        });
+
+        // Event loop que crea bombas periódicamente
+        this.time.addEvent({
+            delay: 500,
+            callback: createBomb,
+            callbackScope: this,
+            loop: true
+        });
+
+        // Player
+        player = this.physics.add.sprite(100, 450, 'dude');
+        player.setBounce(0.2);
+        player.setCollideWorldBounds(true);
+
+        // Animaciones del jugador (igual que antes)
+        this.anims.create({
+            key: 'left',
+            frames: this.anims.generateFrameNumbers('dude', { start: 0, end: 3 }),
+            frameRate: 10,
+            repeat: -1
+        });
+        this.anims.create({
+            key: 'turn',
+            frames: [{ key: 'dude', frame: 4 }],
+            frameRate: 20
+        });
+        this.anims.create({
+            key: 'right',
+            frames: this.anims.generateFrameNumbers('dude', { start: 5, end: 8 }),
+            frameRate: 10,
+            repeat: -1
+        });
+
+        /* -------------------------
+        --------------------------*/
+        this.anims.create({
+            key: 'bomb_idle',
+            frames: this.anims.generateFrameNumbers('bomb', { start: 0, end: 0 }),
+            frameRate: 1,
+            repeat: -1
+        });
+
+        // animación "explode": usa los frames correspondientes de tu spritesheet
+        this.anims.create({
+            key: 'bomb_explode',
+            frames: this.anims.generateFrameNumbers('bomb', { start: 1, end: 10 }), // ajusta aquí
+            frameRate: 12,
+            repeat: 0 // no repetir la animación
+        });
+
+        cursors = this.input.keyboard.createCursorKeys();
+
+        // Colisiones
+        this.physics.add.collider(player, platforms);
+        this.physics.add.collider(player, bombs, onPlayerHitBomb, null, this);
+        this.physics.add.collider(bombs, platforms, onBombHitPlatform, null, this);
+    }
+
+    function update() {
+        if (!cursors) return;
+
+        if (cursors.left.isDown) {
+            player.setVelocityX(-160);
+            player.anims.play('left', true);
+        } else if (cursors.right.isDown) {
+            player.setVelocityX(160);
+            player.anims.play('right', true);
+        } else {
+            player.setVelocityX(0);
+            player.anims.play('turn');
+        }
+
+        if (cursors.up.isDown && player.body.touching.down) {
+            player.setVelocityY(-330);
+        }
+    }
+
+    function createBomb() {
+        let x = Phaser.Math.Between(100, 700);
+        let y = -20;
+        // crea el sprite con la key 'bomb' (spritesheet)
+        var bomb = bombs.create(x, y, 'bomb');
+
+        // ajustes físicos: que reaccione a gravedad y rebote
+        bomb.setBounce(0.4);
+        bomb.setCollideWorldBounds(true);
+
+        // si quieres que tenga velocidad horizontal aleatoria:
+        bomb.setVelocityX(Phaser.Math.Between(-50, 50));
+
+        // reproducir idle (si tienes frame de idle)
+        if (bomb.anims) bomb.anims.play('bomb_idle');
+        // flag para saber si está explotando (evita dobles triggers)
+        bomb.isExploding = false;
+    }
+
+    // Manejo cuando la bomba choca contra una plataforma (por ejemplo cae y toca suelo)
+    function onBombHitPlatform(bomb, platform) {
+        // Si ya está explotando, no hacemos nada
+        if (!bomb || bomb.isExploding) return;
+
+        // Explota en el punto de colisión
+        explodeBomb(bomb, this); // this = scene
+    }
+
+    // Manejo cuando el jugador toca la bomba
+    function onPlayerHitBomb(player, bomb) {
+        if (!bomb || bomb.isExploding) return;
+
+        // Opcional: puedes reducir vida o manejar efecto en el jugador aquí
+
+        // Explota en el punto donde el jugador tocó
+        explodeBomb(bomb, this);
+    }
+
+    // Función que hace que la bomba "explote" y se destruya al terminar la animación
+    function explodeBomb(bomb, scene) {
+        // marca que ya está en proceso de explosión
+        bomb.isExploding = true;
+
+        // DETENER TODOS LOS MOVIMIENTOS y congelar en la posición actual:
+        // - quitar gravedad
+        if (bomb.body && bomb.body.setAllowGravity) bomb.body.setAllowGravity(false);
+        // - detener velocidad
+        if (bomb.setVelocity) bomb.setVelocity(0, 0);
+        // - evitar que el cuerpo siga moviéndose por la simulación
+        if (bomb.body) bomb.body.moves = false;
+        // - hacer que sea inmóvil ante colisiones posteriores
+        if (bomb.setImmovable) bomb.setImmovable(true);
+
+        // reproducir la animación de explosión en el mismo sprite
+        if (bomb.anims) bomb.anims.play('bomb_explode', true);
+
+        // Esperar a que termine la animación y luego destruir el sprite
+        // "animationcomplete" es un evento global; registramos para este sprite
+        bomb.once('animationcomplete', function (anim, frame) {
+            // verificación: que sea la animación correcta (por si hay otras anims)
+            if (anim.key === 'bomb_explode') {
+                if (bomb && bomb.destroy) bomb.destroy();
+            }
+        }, scene);
+
+        // (Opcional) Si quieres además reproducir sonido de explosión:
+        // scene.sound.play('explosionSound');
+    }
+
+</script>
+
+</body>
+</html>
