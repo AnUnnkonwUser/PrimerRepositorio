@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8"/>
-    <title>Phaser - Bombs + Stars + Score (Restart on hit) + Double Jump</title>
+    <title>Phaser - Bombs + Stars + Score + HighScore + Double Jump</title>
     <script src="//cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
     <style>
         body { margin: 0; }
@@ -26,6 +26,8 @@ var config = {
 var player, platforms, bombs, stars, cursors;
 var score = 0;
 var scoreText;
+var highScore = 0;
+var highScoreText;
 
 var game = new Phaser.Game(config);
 
@@ -41,6 +43,10 @@ function preload() {
 function create() {
     // Reiniciar puntaje al empezar la escena para que al "restart" quede a 0
     score = 0;
+
+    // Cargar high score desde localStorage (si existe)
+    const saved = localStorage.getItem('highScore');
+    highScore = saved ? parseInt(saved, 10) || 0 : 0;
 
     this.add.image(400, 300, 'sky');
 
@@ -79,8 +85,6 @@ function create() {
     player.setCollideWorldBounds(true);
 
     // --- DOBLE SALTO: inicializar contador de saltos ---
-    // player.jumpCount: cuántos saltos se han usado desde el último toque de suelo
-    // permitiremos máximo 2 saltos (1 normal + 1 en aire)
     player.jumpCount = 0;
     player.maxJumps = 2; // valor configurable
 
@@ -104,10 +108,16 @@ function create() {
         repeat: 0
     });
 
-    // Texto de puntaje en pantalla
+    // Texto de puntaje en pantalla (score y high score)
     scoreText = this.add.text(16, 16, 'Score: 0', {
-        fontSize: '32px',
+        fontSize: '28px',
         fill: '#ffffff'
+    });
+
+    // Posicionamos highScore a la derecha superior
+    highScoreText = this.add.text(this.cameras.main.width - 220, 16, 'High Score: ' + highScore, {
+        fontSize: '28px',
+        fill: '#ffd700' // dorado para destacar
     });
 
     cursors = this.input.keyboard.createCursorKeys();
@@ -136,30 +146,18 @@ function update() {
     }
 
     // --- DOBLE SALTO: manejo del salto con JustDown para evitar saltos sostenidos ---
-    // Si el jugador está tocando el suelo, reiniciamos el contador de saltos
     if (player.body) {
-        // body.touching.down y body.blocked.down son las formas más fiables
         if (player.body.touching.down || player.body.blocked.down) {
             player.jumpCount = 0;
         }
     }
 
-    // Detectamos pulsación de la tecla arriba (JustDown => un solo trigger por pulsación)
     if (Phaser.Input.Keyboard.JustDown(cursors.up)) {
-        // Si hay saltos disponibles
         if (player.jumpCount < player.maxJumps) {
-            // Ejecuta salto: la primera vez (desde suelo) y la segunda en aire
             player.setVelocityY(-330);
-
-            // Incrementa contador de saltos
             player.jumpCount++;
-
-            // (Opcional) puedes reproducir un sonido de salto aquí
-            // this.sound.play('jumpSound');
         }
     }
-
-    // Nota: el check de salto usa jumpCount y se resetea al tocar suelo arriba.
 }
 
 // Bombas
@@ -177,6 +175,13 @@ function collectStar(player, star) {
     star.disableBody(true, true);
     score += 10;
     scoreText.setText('Score: ' + score);
+
+    // Si superamos el high score, lo actualizamos inmediatamente
+    if (score > highScore) {
+        highScore = score;
+        localStorage.setItem('highScore', String(highScore));
+        highScoreText.setText('High Score: ' + highScore);
+    }
 }
 
 function onBombHitPlatform(bomb, platform) {
@@ -185,8 +190,14 @@ function onBombHitPlatform(bomb, platform) {
 }
 
 function onPlayerHitBomb(player, bomb) {
-    // Si ya está explotando no hacemos nada
     if (!bomb || bomb.isExploding) return;
+
+    // Antes de reiniciar, asegurarse de guardar el high score final si corresponde
+    const saved = localStorage.getItem('highScore');
+    const stored = saved ? parseInt(saved, 10) || 0 : 0;
+    if (score > stored) {
+        localStorage.setItem('highScore', String(score));
+    }
 
     // Reiniciar la escena al tocar la bomba
     this.scene.restart();
