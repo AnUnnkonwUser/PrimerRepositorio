@@ -1,0 +1,16 @@
+(Este es el codigo para el puntaje)
+// Variables del puntaje
+let score = 0;
+let scoreText;
+
+// Texto del puntaje en pantalla (dentro de create())
+scoreText = this.add.text(16, 16, 'Puntuación: 0', {
+  fontSize: '24px',
+  fill: '#ffffff',
+  fontStyle: 'bold'
+});
+
+// Lógica para sumar puntos (dentro de collectStar())
+const value = 10;
+score += value;
+scoreText.setText('Puntuación: ' + score);
