@@ -1,3 +1,4 @@
+(Este es el codigo aparte para el doble salto)
 Inicializa contador de saltos (en create(), justo después de crear al player) ---
 player.jumpCount = 0;
 player.maxJumps = 2; // 1 salto normal + 1 salto en aire
@@ -16,3 +17,4 @@ if (Phaser.Input.Keyboard.JustDown(cursors.up)) {
         player.jumpCount++;
     }
 }
+
