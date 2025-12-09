@@ -1,0 +1,28 @@
+// declaración de variables globales
+var score = 0;
+var scoreText;
+var highScore = 0;
+var highScoreText;
+
+// en create(): leer high score guardado y mostrar en pantalla
+const saved = localStorage.getItem('highScore');
+highScore = saved ? parseInt(saved, 10) || 0 : 0;
+highScoreText = this.add.text(this.cameras.main.width - 220, 16, 'High Score: ' + highScore, {
+    fontSize: '28px',
+    fill: '#ffd700'
+});
+
+// en collectStar(): actualizar high score si se supera
+if (score > highScore) {
+    highScore = score;
+    localStorage.setItem('highScore', String(highScore));
+    highScoreText.setText('High Score: ' + highScore);
+}
+
+// en onPlayerHitBomb(): antes de reiniciar la escena, comparar y guardar
+const saved = localStorage.getItem('highScore');
+const stored = saved ? parseInt(saved, 10) || 0 : 0;
+if (score > stored) {
+    localStorage.setItem('highScore', String(score));
+}
+this.scene.restart();
