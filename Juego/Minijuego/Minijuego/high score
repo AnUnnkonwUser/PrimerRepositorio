@@ -1,3 +1,4 @@
+(Este solo es el fragmento en donde esta el codigo)
 // declaración de variables globales
 var score = 0;
 var scoreText;
