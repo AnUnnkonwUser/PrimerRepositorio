@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Phaser - Bombs + Stars + Score (Restart on hit) + Double Jump</title>
+    <script src="//cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
+    <style>
+        body { margin: 0; }
+    </style>
+</head>
+<body>
+
+<script>
+
+var config = {
+    type: Phaser.AUTO,
+    width: 800,
+    height: 600,
+    physics: {
+        default: 'arcade',
+        arcade: { gravity: { y: 300 }, debug: false }
+    },
+    scene: { preload, create, update }
+};
+
+var player, platforms, bombs, stars, cursors;
+var score = 0;
+var scoreText;
+
+var game = new Phaser.Game(config);
+
+function preload() {
+    this.load.image('sky', 'assets/sky.png');
+    this.load.image('ground', 'assets/platform.png');
+    this.load.image('star', 'assets/stars.png'); // asegúrate que exista assets/stars.png
+
+    this.load.spritesheet('bomb', 'assets/bomb_spritesheet.png', { frameWidth: 32, frameHeight: 32 });
+    this.load.spritesheet('dude', 'assets/dude.png', { frameWidth: 32, frameHeight: 48 });
+}
+
+function create() {
+    // Reiniciar puntaje al empezar la escena para que al "restart" quede a 0
+    score = 0;
+
+    this.add.image(400, 300, 'sky');
+
+    platforms = this.physics.add.staticGroup();
+    platforms.create(400, 568, 'ground').setScale(2).refreshBody();
+
+    // Grupo de estrellas (recolectables)
+    stars = this.physics.add.group({
+        key: 'star',
+        repeat: 7,
+        setXY: { x: 50, y: 0, stepX: 100 }
+    });
+
+    stars.children.iterate(function (child) {
+        child.setBounceY(Phaser.Math.FloatBetween(0.2, 0.4));
+        // child.setScale(1.2); // opcional: aumentar tamaño de la estrella
+    });
+
+    // Bombas (spritesheet)
+    bombs = this.physics.add.group({
+        defaultKey: 'bomb',
+        bounceY: 0.2,
+        collideWorldBounds: true
+    });
+
+    this.time.addEvent({
+        delay: 1000,
+        callback: createBomb,
+        callbackScope: this,
+        loop: true
+    });
+
+    // Player
+    player = this.physics.add.sprite(100, 450, 'dude');
+    player.setBounce(0.2);
+    player.setCollideWorldBounds(true);
+
+    // --- DOBLE SALTO: inicializar contador de saltos ---
+    // player.jumpCount: cuántos saltos se han usado desde el último toque de suelo
+    // permitiremos máximo 2 saltos (1 normal + 1 en aire)
+    player.jumpCount = 0;
+    player.maxJumps = 2; // valor configurable
+
+    // Animaciones jugador
+    this.anims.create({ key: 'left', frames: this.anims.generateFrameNumbers('dude', { start: 0, end: 3 }), frameRate: 10, repeat: -1 });
+    this.anims.create({ key: 'turn', frames: [{ key: 'dude', frame: 4 }], frameRate: 20 });
+    this.anims.create({ key: 'right', frames: this.anims.generateFrameNumbers('dude', { start: 5, end: 8 }), frameRate: 10, repeat: -1 });
+
+    // Animaciones bomba
+    this.anims.create({
+        key: 'bomb_idle',
+        frames: this.anims.generateFrameNumbers('bomb', { start: 0, end: 0 }),
+        frameRate: 1,
+        repeat: -1
+    });
+
+    this.anims.create({
+        key: 'bomb_explode',
+        frames: this.anims.generateFrameNumbers('bomb', { start: 1, end: 10 }), // ajusta según tu spritesheet
+        frameRate: 12,
+        repeat: 0
+    });
+
+    // Texto de puntaje en pantalla
+    scoreText = this.add.text(16, 16, 'Score: 0', {
+        fontSize: '32px',
+        fill: '#ffffff'
+    });
+
+    cursors = this.input.keyboard.createCursorKeys();
+
+    // Colisiones / overlaps
+    this.physics.add.collider(player, platforms);
+    this.physics.add.collider(stars, platforms);
+    this.physics.add.overlap(player, stars, collectStar, null, this);
+
+    // Cuando el jugador colisiona con una bomba: reiniciar escena
+    this.physics.add.collider(player, bombs, onPlayerHitBomb, null, this);
+    this.physics.add.collider(bombs, platforms, onBombHitPlatform, null, this);
+}
+
+function update() {
+    // Movimiento horizontal
+    if (cursors.left.isDown) {
+        player.setVelocityX(-160);
+        player.anims.play('left', true);
+    } else if (cursors.right.isDown) {
+        player.setVelocityX(160);
+        player.anims.play('right', true);
+    } else {
+        player.setVelocityX(0);
+        player.anims.play('turn');
+    }
+
+    // --- DOBLE SALTO: manejo del salto con JustDown para evitar saltos sostenidos ---
+    // Si el jugador está tocando el suelo, reiniciamos el contador de saltos
+    if (player.body) {
+        // body.touching.down y body.blocked.down son las formas más fiables
+        if (player.body.touching.down || player.body.blocked.down) {
+            player.jumpCount = 0;
+        }
+    }
+
+    // Detectamos pulsación de la tecla arriba (JustDown => un solo trigger por pulsación)
+    if (Phaser.Input.Keyboard.JustDown(cursors.up)) {
+        // Si hay saltos disponibles
+        if (player.jumpCount < player.maxJumps) {
+            // Ejecuta salto: la primera vez (desde suelo) y la segunda en aire
+            player.setVelocityY(-330);
+
+            // Incrementa contador de saltos
+            player.jumpCount++;
+
+            // (Opcional) puedes reproducir un sonido de salto aquí
+            // this.sound.play('jumpSound');
+        }
+    }
+
+    // Nota: el check de salto usa jumpCount y se resetea al tocar suelo arriba.
+}
+
+// Bombas
+function createBomb() {
+    let x = Phaser.Math.Between(100, 700);
+    let y = -20;
+    var bomb = bombs.create(x, y, 'bomb');
+    bomb.setVelocityX(Phaser.Math.Between(-50, 50));
+    bomb.anims.play('bomb_idle');
+    bomb.isExploding = false;
+}
+
+// Recolectar estrella
+function collectStar(player, star) {
+    star.disableBody(true, true);
+    score += 10;
+    scoreText.setText('Score: ' + score);
+}
+
+function onBombHitPlatform(bomb, platform) {
+    if (!bomb || bomb.isExploding) return;
+    explodeBomb(bomb, this);
+}
+
+function onPlayerHitBomb(player, bomb) {
+    // Si ya está explotando no hacemos nada
+    if (!bomb || bomb.isExploding) return;
+
+    // Reiniciar la escena al tocar la bomba
+    this.scene.restart();
+}
+
+function explodeBomb(bomb, scene) {
+    bomb.isExploding = true;
+
+    if (bomb.body) bomb.body.setAllowGravity(false);
+    if (bomb.setVelocity) bomb.setVelocity(0, 0);
+    bomb.body.moves = false;
+    bomb.setImmovable(true);
+
+    bomb.anims.play('bomb_explode', true);
+
+    bomb.once('animationcomplete', function (anim) {
+        if (anim.key === 'bomb_explode') {
+            if (bomb && bomb.destroy) bomb.destroy();
+        }
+    }, scene);
+}
+
+</script>
+</body>
+</html>

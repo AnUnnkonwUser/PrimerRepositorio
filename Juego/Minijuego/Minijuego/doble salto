@@ -1,0 +1,18 @@
+Inicializa contador de saltos (en create(), justo después de crear al player) ---
+player.jumpCount = 0;
+player.maxJumps = 2; // 1 salto normal + 1 salto en aire
+
+// --- En update(): resetear al aterrizar ---
+if (player.body) {
+    if (player.body.touching.down || player.body.blocked.down) {
+        player.jumpCount = 0;
+    }
+}
+
+// --- En update(): detección de pulsación y ejecución del salto (usa JustDown para un solo trigger) ---
+if (Phaser.Input.Keyboard.JustDown(cursors.up)) {
+    if (player.jumpCount < player.maxJumps) {
+        player.setVelocityY(-330);   // fuerza de salto (ajusta si quieres más/menos)
+        player.jumpCount++;
+    }
+}
